@@ -112,8 +112,11 @@ jobs:
       - name: 'Build & push Windows image to GHCR'
         shell: pwsh
         run: |
-          $repo = "${{ github.repository }}".ToLower()
-          $image = "ghcr.io/$repo:${{ github.sha }}"
+          # Use runner env vars (not ${{ }}) inside PowerShell, and wrap the
+          # variable as ${repo} â€” a bare "$repo:" is parsed as a scope qualifier
+          # and collapses to empty (ghcr.io/).
+          $repo = ($env:GITHUB_REPOSITORY).ToLower()
+          $image = "ghcr.io/${repo}:$($env:GITHUB_SHA)"
           Write-Host "Image: $image"
           $df = @(
             'FROM mcr.microsoft.com/dotnet/framework/aspnet:4.8-windowsservercore-ltsc2022',
