@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -60,28 +63,29 @@ jobs:
           name: 'Netfx48SampleApp'
           path: 'Netfx48SampleApp.zip'
           if-no-files-found: 'error'
-      - name: 'Coverage (SonarCloud): set up JDK'
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-      - name: 'Coverage (SonarCloud): install SonarScanner for MSBuild'
-        shell: pwsh
-        run: |
-          dotnet tool install --global dotnet-sonarscanner
-      - name: 'Coverage (SonarCloud): scan begin'
-        shell: pwsh
-        run: |
-          $sonarHost = if ($env:SONAR_HOST_URL) { $env:SONAR_HOST_URL } else { "https://sonarcloud.io" }
-          dotnet-sonarscanner begin /k:"Komali612_netfx48-sample-app" /o:"komali612" /d:sonar.host.url="$sonarHost" /d:sonar.token="$env:SONAR_TOKEN" /d:sonar.qualitygate.wait=false
-      - name: 'Coverage (SonarCloud): build under the scanner'
-        shell: pwsh
-        run: |
-          msbuild "netfx48-sample-app.csproj" /p:Configuration=Release /p:Platform="AnyCPU"
-      - name: 'Coverage (SonarCloud): scan end'
-        shell: pwsh
-        run: |
-          dotnet-sonarscanner end /d:sonar.token="$env:SONAR_TOKEN"
+      # COVERAGE (SonarScanner for MSBuild) - not selected in the orchestrator UI
+      # - name: 'Coverage (not selected): set up JDK'
+        # uses: actions/setup-java@v4
+        # with:
+          # distribution: 'temurin'
+          # java-version: '17'
+      # - name: 'Coverage (not selected): install SonarScanner for MSBuild'
+        # shell: pwsh
+        # run: |
+          # dotnet tool install --global dotnet-sonarscanner
+      # - name: 'Coverage (not selected): scan begin'
+        # shell: pwsh
+        # run: |
+          # $sonarHost = if ($env:SONAR_HOST_URL) { $env:SONAR_HOST_URL } else { "https://sonarcloud.io" }
+          # dotnet-sonarscanner begin /k:"Netfx48SampleApp" /d:sonar.host.url="$sonarHost" /d:sonar.token="$env:SONAR_TOKEN" /d:sonar.qualitygate.wait=false
+      # - name: 'Coverage (not selected): build under the scanner'
+        # shell: pwsh
+        # run: |
+          # msbuild "netfx48-sample-app.csproj" /p:Configuration=Release /p:Platform="AnyCPU"
+      # - name: 'Coverage (not selected): scan end'
+        # shell: pwsh
+        # run: |
+          # dotnet-sonarscanner end /d:sonar.token="$env:SONAR_TOKEN"
       # SAST - not selected in the orchestrator UI
       # - name: 'Run SAST (not selected)'
         # shell: pwsh
@@ -112,9 +116,11 @@ jobs:
       - name: 'Build & push Windows image to GHCR'
         shell: pwsh
         run: |
-          # Use runner env vars (not ${{ }}) inside PowerShell, and wrap the
-          # variable as ${repo} â€” a bare "$repo:" is parsed as a scope qualifier
-          # and collapses to empty (ghcr.io/).
+          # Build the image ref from runner env vars; wrap the variable as
+          # ${repo} because a bare "$repo:" is parsed by PowerShell as a scope
+          # qualifier and collapses to empty (ghcr.io/). Do NOT put a GitHub
+          # expression in a run-block comment â€” GitHub evaluates it and an empty
+          # one fails the workflow at startup.
           $repo = ($env:GITHUB_REPOSITORY).ToLower()
           $image = "ghcr.io/${repo}:$($env:GITHUB_SHA)"
           Write-Host "Image: $image"
