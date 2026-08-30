@@ -18,3 +18,5 @@ pipeline, and open a pull request adding `.github/workflows/…-ci.yml`.
 nuget restore netfx48-sample-app.csproj -PackagesDirectory packages
 msbuild netfx48-sample-app.csproj /p:Configuration=Release /p:Platform=AnyCPU
 ```
+
+<!-- CI re-test 2026-08-30T20:01:53Z -->
