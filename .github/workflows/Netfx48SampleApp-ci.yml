@@ -1,0 +1,132 @@
+name: 'Netfx48SampleApp CI Pipeline'
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+  SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+jobs:
+  build-publish:
+    name: Build, Publish and Upload ZIP
+    runs-on: windows-2022
+    steps:
+      - name: 'Checkout repository'
+        uses: actions/checkout@v4
+      - name: 'Setup .NET'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: 'Setup MSBuild'
+        uses: microsoft/setup-msbuild@v2
+      - name: 'Restore NuGet packages'
+        shell: pwsh
+        run: |
+          $packagesDirectory = Join-Path $env:GITHUB_WORKSPACE "packages"
+          New-Item -ItemType Directory -Path $packagesDirectory -Force | Out-Null
+          nuget restore "netfx48-sample-app.csproj" -PackagesDirectory "$packagesDirectory"
+          if ($LASTEXITCODE -ne 0) { throw "NuGet restore failed." }
+      - name: 'Build application'
+        shell: pwsh
+        run: |
+          msbuild "netfx48-sample-app.csproj" /p:Configuration=Release /p:Platform="AnyCPU"
+          if ($LASTEXITCODE -ne 0) { throw "Application build failed." }
+      - name: 'Publish application'
+        shell: pwsh
+        run: |
+          $publishDirectory = Join-Path $env:GITHUB_WORKSPACE "publish"
+          if (Test-Path $publishDirectory) { Remove-Item $publishDirectory -Recurse -Force }
+          New-Item -ItemType Directory -Path $publishDirectory -Force | Out-Null
+          msbuild "netfx48-sample-app.csproj" /t:WebPublish /p:Configuration=Release /p:Platform="AnyCPU" /p:WebPublishMethod=FileSystem /p:publishUrl="$publishDirectory" /p:DeleteExistingFiles=true
+          if ($LASTEXITCODE -ne 0) { throw "Application publish failed." }
+      - name: 'Create ZIP'
+        shell: pwsh
+        run: |
+          $publishDirectory = Join-Path $env:GITHUB_WORKSPACE "publish"
+          $zipPath = Join-Path $env:GITHUB_WORKSPACE "Netfx48SampleApp.zip"
+          Compress-Archive -Path "$publishDirectory\*" -DestinationPath $zipPath -Force
+          if (!(Test-Path $zipPath)) { throw "ZIP file was not created." }
+      - name: 'Upload ZIP artifact'
+        uses: actions/upload-artifact@v4
+        with:
+          name: 'Netfx48SampleApp'
+          path: 'Netfx48SampleApp.zip'
+          if-no-files-found: 'error'
+      - name: 'Coverage (SonarCloud): set up JDK'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: 'Coverage (SonarCloud): install SonarScanner for MSBuild'
+        shell: pwsh
+        run: |
+          dotnet tool install --global dotnet-sonarscanner
+      - name: 'Coverage (SonarCloud): scan begin'
+        shell: pwsh
+        run: |
+          $sonarHost = if ($env:SONAR_HOST_URL) { $env:SONAR_HOST_URL } else { "https://sonarcloud.io" }
+          dotnet-sonarscanner begin /k:"Komali612_netfx48-sample-app" /o:"komali612" /d:sonar.host.url="$sonarHost" /d:sonar.token="$env:SONAR_TOKEN" /d:sonar.qualitygate.wait=false
+      - name: 'Coverage (SonarCloud): build under the scanner'
+        shell: pwsh
+        run: |
+          msbuild "netfx48-sample-app.csproj" /p:Configuration=Release /p:Platform="AnyCPU"
+      - name: 'Coverage (SonarCloud): scan end'
+        shell: pwsh
+        run: |
+          dotnet-sonarscanner end /d:sonar.token="$env:SONAR_TOKEN"
+      # SAST - not selected in the orchestrator UI
+      # - name: 'Run SAST (not selected)'
+        # shell: pwsh
+        # run: |
+          # echo "SAST analysis via not selected (placeholder)"
+      # SCA - not selected in the orchestrator UI
+      # - name: 'Run SCA (not selected)'
+        # shell: pwsh
+        # run: |
+          # echo "SCA analysis via not selected (placeholder)"
+      # DAST - not selected in the orchestrator UI
+      # - name: 'Run DAST (not selected)'
+        # shell: pwsh
+        # run: |
+          # echo "DAST analysis via not selected (placeholder)"
+      # IMGSCAN - not applicable to .NET Framework (ships a zip/MSI/DLL artifact, not a container image)
+      # ARTIFACT UPLOAD - not selected in the orchestrator UI
+      # - name: 'Publish artifacts (not selected)'
+        # shell: pwsh
+        # run: |
+          # echo "Publish build artifacts to not selected (placeholder)"
+      - name: 'Log in to GHCR (ghcr.io)'
+        uses: docker/login-action@v3
+        with:
+          registry: 'ghcr.io'
+          username: '${{ github.actor }}'
+          password: '${{ secrets.GITHUB_TOKEN }}'
+      - name: 'Build & push Windows image to GHCR'
+        shell: pwsh
+        run: |
+          $repo = "${{ github.repository }}".ToLower()
+          $image = "ghcr.io/$repo:${{ github.sha }}"
+          Write-Host "Image: $image"
+          $df = @(
+            'FROM mcr.microsoft.com/dotnet/framework/aspnet:4.8-windowsservercore-ltsc2022',
+            'WORKDIR /inetpub/wwwroot',
+            'COPY publish/ ./'
+          )
+          Set-Content -Path Dockerfile -Value $df -Encoding ascii
+          docker build -t $image .
+          if ($LASTEXITCODE -ne 0) { throw "docker build failed." }
+          docker push $image
+          if ($LASTEXITCODE -ne 0) { throw "docker push failed." }
+      # MONITORING - not selected in the orchestrator UI
+      # - name: 'Send telemetry (not selected)'
+        # shell: pwsh
+        # run: |
+          # echo "Send build metrics/logs to not selected (placeholder)"
