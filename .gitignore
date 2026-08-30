@@ -1,0 +1,13 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+publish/
+*.zip
+
+# NuGet packages restored at build time
+packages/
+
+# User/IDE
+.vs/
+*.user
+*.suo
