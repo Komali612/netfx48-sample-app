@@ -11,11 +11,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
-
-env:
-  SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-  SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
 jobs:
   build-publish:
@@ -63,79 +58,24 @@ jobs:
           name: 'Netfx48SampleApp'
           path: 'Netfx48SampleApp.zip'
           if-no-files-found: 'error'
-      # COVERAGE (SonarScanner for MSBuild) - not selected in the orchestrator UI
-      # - name: 'Coverage (not selected): set up JDK'
-        # uses: actions/setup-java@v4
+      # ARTIFACT UPLOAD (Azure Blob Storage - Fiserve step 9): NOT activated.
+      # Activate by selecting 'Artifact repository = Azure Blob Storage' in the
+      # orchestrator UI and setting AZURE_CREDENTIALS / AZURE_STORAGE_ACCOUNT_KEY /
+      # AZURE_STORAGE_ACCOUNT / AZURE_CONTAINER secrets. It then runs:
+      # - name: 'Azure Login (Azure Blob Storage)'
+        # uses: azure/login@v2
         # with:
-          # distribution: 'temurin'
-          # java-version: '17'
-      # - name: 'Coverage (not selected): install SonarScanner for MSBuild'
+          # creds: '${{ secrets.AZURE_CREDENTIALS }}'
+      # - name: 'Upload artifact to Azure Blob Storage'
         # shell: pwsh
+        # env:
+          # AZURE_STORAGE_ACCOUNT_KEY: ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}
         # run: |
-          # dotnet tool install --global dotnet-sonarscanner
-      # - name: 'Coverage (not selected): scan begin'
-        # shell: pwsh
-        # run: |
-          # $sonarHost = if ($env:SONAR_HOST_URL) { $env:SONAR_HOST_URL } else { "https://sonarcloud.io" }
-          # dotnet-sonarscanner begin /k:"Netfx48SampleApp" /d:sonar.host.url="$sonarHost" /d:sonar.token="$env:SONAR_TOKEN" /d:sonar.qualitygate.wait=false
-      # - name: 'Coverage (not selected): build under the scanner'
-        # shell: pwsh
-        # run: |
-          # msbuild "netfx48-sample-app.csproj" /p:Configuration=Release /p:Platform="AnyCPU"
-      # - name: 'Coverage (not selected): scan end'
-        # shell: pwsh
-        # run: |
-          # dotnet-sonarscanner end /d:sonar.token="$env:SONAR_TOKEN"
-      # SAST - not selected in the orchestrator UI
-      # - name: 'Run SAST (not selected)'
-        # shell: pwsh
-        # run: |
-          # echo "SAST analysis via not selected (placeholder)"
-      # SCA - not selected in the orchestrator UI
-      # - name: 'Run SCA (not selected)'
-        # shell: pwsh
-        # run: |
-          # echo "SCA analysis via not selected (placeholder)"
-      # DAST - not selected in the orchestrator UI
-      # - name: 'Run DAST (not selected)'
-        # shell: pwsh
-        # run: |
-          # echo "DAST analysis via not selected (placeholder)"
-      # IMGSCAN - not applicable to .NET Framework (ships a zip/MSI/DLL artifact, not a container image)
-      # ARTIFACT UPLOAD - not selected in the orchestrator UI
-      # - name: 'Publish artifacts (not selected)'
-        # shell: pwsh
-        # run: |
-          # echo "Publish build artifacts to not selected (placeholder)"
-      - name: 'Log in to GHCR (ghcr.io)'
-        uses: docker/login-action@v3
-        with:
-          registry: 'ghcr.io'
-          username: '${{ github.actor }}'
-          password: '${{ secrets.GITHUB_TOKEN }}'
-      - name: 'Build & push Windows image to GHCR'
-        shell: pwsh
-        run: |
-          # Build the image ref from runner env vars; wrap the variable as
-          # ${repo} because a bare "$repo:" is parsed by PowerShell as a scope
-          # qualifier and collapses to empty (ghcr.io/). Do NOT put a GitHub
-          # expression in a run-block comment â€” GitHub evaluates it and an empty
-          # one fails the workflow at startup.
-          $repo = ($env:GITHUB_REPOSITORY).ToLower()
-          $image = "ghcr.io/${repo}:$($env:GITHUB_SHA)"
-          Write-Host "Image: $image"
-          $df = @(
-            'FROM mcr.microsoft.com/dotnet/framework/aspnet:4.8-windowsservercore-ltsc2022',
-            'WORKDIR /inetpub/wwwroot',
-            'COPY publish/ ./'
-          )
-          Set-Content -Path Dockerfile -Value $df -Encoding ascii
-          docker build -t $image .
-          if ($LASTEXITCODE -ne 0) { throw "docker build failed." }
-          docker push $image
-          if ($LASTEXITCODE -ne 0) { throw "docker push failed." }
-      # MONITORING - not selected in the orchestrator UI
-      # - name: 'Send telemetry (not selected)'
-        # shell: pwsh
-        # run: |
-          # echo "Send build metrics/logs to not selected (placeholder)"
+          # az storage blob upload `
+            # --account-name "${{ secrets.AZURE_STORAGE_ACCOUNT }}" `
+            # --account-key "$env:AZURE_STORAGE_ACCOUNT_KEY" `
+            # --container-name "${{ secrets.AZURE_CONTAINER }}" `
+            # --name "Netfx48SampleApp.zip" `
+            # --file "$env:GITHUB_WORKSPACE\Netfx48SampleApp.zip" `
+            # --auth-mode key `
+            # --overwrite true
